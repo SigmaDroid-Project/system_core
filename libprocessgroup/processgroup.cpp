@@ -227,7 +227,7 @@ static int RemoveCgroup(const char* cgroup, uid_t uid, int pid, unsigned int ret
     return ret;
 }
 
-static bool RemoveEmptyUidCgroups(const std::string& uid_path) {
+static bool RemoveUidCgroups(const std::string& uid_path, bool empty_only) {
     std::unique_ptr<DIR, decltype(&closedir)> uid(opendir(uid_path.c_str()), closedir);
     bool empty = true;
     if (uid != NULL) {
@@ -242,6 +242,21 @@ static bool RemoveEmptyUidCgroups(const std::string& uid_path) {
             }
 
             auto path = StringPrintf("%s/%s", uid_path.c_str(), dir->d_name);
+            if (empty_only) {
+                struct stat st;
+                auto procs_file = StringPrintf("%s/%s", path.c_str(),
+                                               PROCESSGROUP_CGROUP_PROCS_FILE);
+                if (stat(procs_file.c_str(), &st) == -1) {
+                    PLOG(ERROR) << "Failed to get stats for " << procs_file;
+                    continue;
+                }
+                if (st.st_size > 0) {
+                    // skip non-empty groups
+                    LOG(VERBOSE) << "Skipping non-empty group " << path;
+                    empty = false;
+                    continue;
+                }
+            }
             LOG(VERBOSE) << "Removing " << path;
             if (rmdir(path.c_str()) == -1) {
                 if (errno != EBUSY) {
@@ -254,9 +269,7 @@ static bool RemoveEmptyUidCgroups(const std::string& uid_path) {
     return empty;
 }
 
-void removeAllEmptyProcessGroups() {
-    LOG(VERBOSE) << "removeAllEmptyProcessGroups()";
-
+static void removeAllProcessGroupsInternal(bool empty_only) {
     std::vector<std::string> cgroups;
     std::string path, memcg_apps_path;
 
@@ -283,7 +296,7 @@ void removeAllEmptyProcessGroups() {
                 }
 
                 auto path = StringPrintf("%s/%s", cgroup_root_path.c_str(), dir->d_name);
-                if (!RemoveEmptyUidCgroups(path)) {
+                if (!RemoveUidCgroups(path, empty_only)) {
                     LOG(VERBOSE) << "Skip removing " << path;
                     continue;
                 }
@@ -294,6 +307,16 @@ void removeAllEmptyProcessGroups() {
             }
         }
     }
+}
+
+void removeAllProcessGroups() {
+    LOG(VERBOSE) << "removeAllProcessGroups()";
+    removeAllProcessGroupsInternal(false);
+}
+
+void removeAllEmptyProcessGroups() {
+    LOG(VERBOSE) << "removeAllEmptyProcessGroups()";
+    removeAllProcessGroupsInternal(true);
 }
 
 /**
