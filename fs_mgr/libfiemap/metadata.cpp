@@ -111,7 +111,13 @@ bool SaveMetadata(MetadataBuilder* builder, const std::string& metadata_dir) {
         return true;
     }
 
-    if (!WriteToImageFile(metadata_file, *exported.get())) {
+    unique_fd fd(open(metadata_file.c_str(), O_CREAT | O_RDWR | O_TRUNC | O_CLOEXEC | O_BINARY | O_SYNC, 0644));
+    if (fd < 0) {
+        LOG(ERROR) << "open failed: " << metadata_file;
+        return false;
+    }
+
+    if (!WriteToImageFile(fd, *exported.get())) {
         LOG(ERROR) << "Unable to save new metadata";
         return false;
     }
