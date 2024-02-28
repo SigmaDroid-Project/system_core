@@ -160,7 +160,7 @@ class SetCgroupAction : public ProfileAction {
     android::base::unique_fd fd_[ProfileAction::RCT_COUNT];
     mutable std::mutex fd_mutex_;
 
-    bool AddTidToCgroup(int tid, int fd, ResourceCacheType cache_type) const;
+    static bool AddTidToCgroup(int tid, int fd, const char* controller_name);
     CacheUseResult UseCachedFd(ResourceCacheType cache_type, int id) const;
 };
 
